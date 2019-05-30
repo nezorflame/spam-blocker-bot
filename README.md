@@ -1,2 +1,3 @@
-# spam-blocker-bot
-Telegram bot for group administration which blocks the spammers using the Combot Anti-Spam System list
+# spam-blocker-bot [![CircleCI](https://circleci.com/gh/nezorflame/spam-blocker-bot/tree/master.svg?style=svg)](https://circleci.com/gh/nezorflame/spam-blocker-bot/tree/master) [![Go Report Card](https://goreportcard.com/badge/github.com/nezorflame/spam-blocker-bot)](https://goreportcard.com/report/github.com/nezorflame/spam-blocker-bot) [![GolangCI](https://golangci.com/badges/github.com/nezorflame/spam-blocker-bot.svg)](https://golangci.com/r/github.com/nezorflame/spam-blocker-bot)
+
+Telegram bot for group administration which blocks the spammers using the [Combot Anti-Spam System list](https://combot.org/cas).
