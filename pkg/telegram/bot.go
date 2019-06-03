@@ -7,7 +7,7 @@ import (
 
 	"github.com/nezorflame/spam-blocker-bot/pkg/spamlist"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -38,8 +38,8 @@ func NewBot(ctx context.Context, cfg *viper.Viper) (*Bot, error) {
 	}
 
 	log.Info("Loading spam list...")
-	list := spamlist.New()
-	log.Debugf("Spam list imported with %d elements", len(list.UserIDs))
+	list := spamlist.New(cfg)
+	log.Infof("Spam list imported with %d elements", len(list.UserIDs))
 
 	log.Debugf("Authorized on account %s", api.Self.UserName)
 	return &Bot{api: api, cfg: cfg, ctx: ctx, spamList: list}, nil
@@ -49,12 +49,19 @@ func NewBot(ctx context.Context, cfg *viper.Viper) (*Bot, error) {
 func (b *Bot) Start() {
 	update := tgbotapi.NewUpdate(0)
 	update.Timeout = b.cfg.GetInt("telegram.timeout")
-	b.listen(b.api.GetUpdatesChan(update))
+	updates, err := b.api.GetUpdatesChan(update)
+	if err != nil {
+		log.WithError(err).Fatal("Unable to start listening to bot updates")
+	}
+	b.listen(updates)
 }
 
 // Stop stops the bot
 func (b *Bot) Stop() {
 	b.api.StopReceivingUpdates()
+	if err := b.spamList.Save(); err != nil {
+		log.WithError(err).Warn("Unable to save spamlist to filesystem")
+	}
 }
 
 func (b *Bot) listen(updates tgbotapi.UpdatesChannel) {
@@ -63,24 +70,18 @@ func (b *Bot) listen(updates tgbotapi.UpdatesChannel) {
 			continue
 		}
 
+		newMembers := u.Message.NewChatMembers
 		switch {
-		case len(u.Message.NewChatMembers) > 0:
+		case newMembers != nil && len(*newMembers) > 0:
 			go b.check(u.Message)
 		case strings.HasPrefix(u.Message.Text, b.cfg.GetString("commands.start")):
 			go b.hello(u.Message)
-		case strings.HasPrefix(u.Message.Text, b.cfg.GetString("commands.help")):
-			go b.help(u.Message)
 		}
 	}
 }
 
 func (b *Bot) hello(msg *tgbotapi.Message) {
 	b.reply(msg.Chat.ID, msg.MessageID, b.cfg.GetString("messages.hello"))
-}
-
-func (b *Bot) help(msg *tgbotapi.Message) {
-	log.WithField("user_id", msg.From.ID).Debug("Got help request")
-	b.reply(msg.Chat.ID, msg.MessageID, b.cfg.GetString("messages.help"))
 }
 
 func (b *Bot) reply(chatID int64, msgID int, text string) {

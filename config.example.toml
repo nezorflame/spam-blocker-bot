@@ -1,3 +1,8 @@
+[cas]
+export_url = "https://combot.org/api/cas/export.csv"
+check_url = "https://combot.org/api/cas/check?user_id=%d"
+local_file = "/tmp/your_file.json"
+
 [telegram]
 token = "YOUR:TELEGRAMBOTTOKEN"
 timeout = 60
@@ -5,11 +10,10 @@ debug = false
 
 [commands]
 start = "/start"
-help = "/help"
 
 [messages]
 hello = "Hello!"
-help = "I'm here to help!"
+blocked = "User %s is blocked!"
 
 [errors]
 unknown = "Unknown error! Please contact the developer!"

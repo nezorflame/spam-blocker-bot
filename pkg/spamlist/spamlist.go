@@ -6,32 +6,41 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	combotCheckURL  = "https://combot.org/api/cas/check?user_id=%d"
-	combotExportURL = "https://combot.org/api/cas/export.csv"
-)
-
 // SpamList is used for spam protection
 type SpamList struct {
-	UserIDs []int
-	Date    time.Time
+	UserIDs []int     `json:"user_ids"`
+	Date    time.Time `json:"date"`
 
+	cfg *viper.Viper
 	mtx sync.RWMutex
 }
 
 // New creates new SpamList, importing it from CAS API
-func New() (list *SpamList) {
-	list = &SpamList{Date: time.Now()}
+func New(cfg *viper.Viper) (list *SpamList) {
+	var err error
+	list = &SpamList{Date: time.Now(), cfg: cfg}
+	// defer list loading from filesystem if we had an error in the process
+	defer func() {
+		if err != nil {
+			if err = list.Load(); err != nil {
+				log.WithError(err).Warn("Unable to load CAS list from filesystem")
+			}
+		}
+	}()
 
-	resp, err := http.Get(combotExportURL)
+	resp, err := http.Get(list.cfg.GetString("cas.export_url"))
 	if err != nil {
 		log.WithError(err).Warn("Unable to import CAS list")
 		return
@@ -73,7 +82,7 @@ func (sl *SpamList) CheckUser(id int) (check bool, ok bool) {
 		}
 	}
 
-	check, err := lookup(id)
+	check, err := lookup(sl.cfg.GetString("cas.check_url"), id)
 	if err != nil {
 		log.WithError(err).Warnf("Unable to check user '%d'", id)
 		return false, false
@@ -89,8 +98,43 @@ func (sl *SpamList) Add(id int) {
 	sl.mtx.Unlock()
 }
 
-func lookup(id int) (bool, error) {
-	resp, err := http.Get(fmt.Sprintf(combotCheckURL, id))
+// Save saves spam list to the filesystem as JSON
+func (sl *SpamList) Save() error {
+	sl.mtx.RLock()
+	defer sl.mtx.RUnlock()
+
+	data, err := json.Marshal(sl)
+	if err != nil {
+		return errors.Wrap(err, "unable to marshal spamlist")
+	}
+
+	path := filepath.Clean(sl.cfg.GetString("cas.local_file"))
+	if err = ioutil.WriteFile(path, data, os.ModePerm); err != nil {
+		return errors.Wrap(err, "unable to save spamlist")
+	}
+
+	return nil
+}
+
+// Load loads JSON spam list from the filesystem
+func (sl *SpamList) Load() error {
+	sl.mtx.Lock()
+	defer sl.mtx.Unlock()
+
+	data, err := ioutil.ReadFile(filepath.Clean(sl.cfg.GetString("cas.local_file")))
+	if err != nil {
+		return errors.Wrap(err, "unable to load spamlist file")
+	}
+
+	if err = json.Unmarshal(data, sl); err != nil {
+		return errors.Wrap(err, "unable to unmarshal spamlist")
+	}
+
+	return nil
+}
+
+func lookup(url string, id int) (bool, error) {
+	resp, err := http.Get(fmt.Sprintf(url, id))
 	if err != nil {
 		return false, errors.Wrap(err, "unable to call CAS API")
 	}
@@ -105,11 +149,9 @@ func lookup(id int) (bool, error) {
 	if err = json.Unmarshal(body, &respMap); err != nil {
 		return false, errors.Wrap(err, "unable to parse check result")
 	}
-	log.Debug(respMap)
 
 	var result, ok bool
 	if result, ok = respMap["ok"].(bool); !ok {
-		log.Debugf("Bad or empty check result: '%v'", respMap["ok"])
 		return false, errors.New("check result is not a bool")
 	}
 
