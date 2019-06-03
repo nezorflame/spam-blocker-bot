@@ -17,6 +17,7 @@
 bin/
 vendor/
 config.toml
+cas.json
 debug
 .DS_Store
 *.db

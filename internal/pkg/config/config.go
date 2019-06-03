@@ -15,9 +15,8 @@ const (
 var mandatoryParams = []string{
 	"telegram.token",
 	"commands.start",
-	"commands.help",
 	"messages.hello",
-	"messages.help",
+	"messages.blocked",
 	"errors.unknown",
 }
 

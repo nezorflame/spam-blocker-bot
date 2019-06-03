@@ -71,6 +71,6 @@ func main() {
 	}()
 
 	// start the bot
-	log.Info("Starting the bot")
+	log.Info("Listening to the updates...")
 	bot.Start()
 }
